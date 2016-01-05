@@ -11,6 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Rebus.NLog;
 using Rebus.RabbitMq;
+using RabbitMQ.Client.Events;
 
 namespace RabbitMQ.Consumer
 {
@@ -18,27 +19,34 @@ namespace RabbitMQ.Consumer
     {
         static void Main(string[] args)
         {
-            var serverName = ConfigurationManager.AppSettings["RabbitServer"];
+           var serverName = ConfigurationManager.AppSettings["RabbitServer"];
             var queueName = ConfigurationManager.AppSettings["QueueName"];
 
-            var container = new Castle.Windsor.WindsorContainer();
-            var adapter = new CastleWindsorContainerAdapter(container);
+            var factory = new ConnectionFactory() { HostName = ConfigurationManager.AppSettings["RabbitServer"], UserName = "dev", Password = "dev", VirtualHost = "dev_host" };
 
-            container.Register(Classes.FromAssemblyContaining<AuditLogConsumer>()
-           .BasedOn<IHandleMessages>()
-           .WithServiceAllInterfaces()
-           .LifestyleTransient());
+            using (var connection = factory.CreateConnection())
+            using (var channel = connection.CreateModel())
+            {
+                channel.QueueDeclare(queue: "hello",
+                                     durable: false,
+                                     exclusive: false,
+                                     autoDelete: false,
+                                     arguments: null);
 
-            var bus = Configure.With(adapter)
-                .Options(i => i.SetNumberOfWorkers(10).SetMaxParallelism(1))
-                .Logging(i => i.NLog())
-                .Transport(t => t.UseRabbitMq(serverName, queueName))
-                .Start();
+                var consumer = new EventingBasicConsumer(channel);
+                consumer.Received += (model, ea) =>
+                {
+                    var body = ea.Body;
+                    var message = Encoding.UTF8.GetString(body);
+                    Console.WriteLine(" [x] Received {0}", message);
+                };
+                channel.BasicConsume(queue: "hello",
+                                     noAck: true,
+                                     consumer: consumer);
 
-            bus.Subscribe<TestMessage>();
-
-            Console.WriteLine(" Press [enter] to exit.");
-            Console.ReadLine();
+                Console.WriteLine(" Press [enter] to exit.");
+                Console.ReadLine();
+            }
         }
     }
 }

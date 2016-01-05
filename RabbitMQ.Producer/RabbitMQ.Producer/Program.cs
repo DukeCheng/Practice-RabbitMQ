@@ -11,9 +11,8 @@ using System.Text;
 using System.Threading.Tasks;
 using Rebus.NLog;
 using Rebus.RabbitMq;
-using RabbitMQ.Producer;
 
-namespace RabbitMQ.Consumer
+namespace RabbitMQ.Producer
 {
     class Program
     {
@@ -22,47 +21,27 @@ namespace RabbitMQ.Consumer
             var serverName = ConfigurationManager.AppSettings["RabbitServer"];
             var queueName = ConfigurationManager.AppSettings["QueueName"];
 
-            //var factory = new ConnectionFactory() { HostName = ConfigurationManager.AppSettings["RabbitServer"] };
-            //using (var connection = factory.CreateConnection())
-            //{
-            //    using (var channel = connection.CreateModel())
-            //    {
-            //        channel.QueueDeclare(queue: "hello",
-            //                    durable: false,
-            //                    exclusive: false,
-            //                    autoDelete: false,
-            //                    arguments: null);
+            var factory = new ConnectionFactory() { HostName = ConfigurationManager.AppSettings["RabbitServer"], UserName = "dev", Password = "dev", VirtualHost = "dev_host" };
+            using (var connection = factory.CreateConnection())
+            {
+                using (var channel = connection.CreateModel())
+                {
+                    channel.QueueDeclare(queue: "hello",
+                                  durable: false,
+                                  exclusive: false,
+                                  autoDelete: false,
+                                  arguments: null);
 
-            //        string message = "Hello World!";
-            //        var body = Encoding.UTF8.GetBytes(message);
+                    string message = "Hello World!";
+                    var body = Encoding.UTF8.GetBytes(message);
 
-            //        channel.BasicPublish(exchange: "",
-            //                             routingKey: "hello",
-            //                             basicProperties: null,
-            //                             body: body);
-            //        Console.WriteLine(" [x] Sent {0}", message);
-
-
-
-            //    }
-            //}
-
-            var container = new Castle.Windsor.WindsorContainer();
-            var adapter = new CastleWindsorContainerAdapter(container);
-
-            container.Register(Classes.FromAssemblyContaining<AuditingLogConsumer>()
-           .BasedOn<IHandleMessages>()
-           .WithServiceAllInterfaces()
-           .LifestyleTransient());
-
-            var bus = Configure.With(adapter)
-                .Options(i => i.SetNumberOfWorkers(10).SetMaxParallelism(1))
-                .Logging(i => i.NLog())
-                .Transport(t => t.UseRabbitMq(serverName, queueName))
-                .Start();
-
-            bus.Publish(new TestMessage() { Name = "Duke" });
-
+                    channel.BasicPublish(exchange: "",
+                                         routingKey: "hello",
+                                         basicProperties: null,
+                                         body: body);
+                    Console.WriteLine(" [x] Sent {0}", message);
+                }
+            }
             Console.WriteLine(" Press [enter] to exit.");
             Console.ReadLine();
         }
