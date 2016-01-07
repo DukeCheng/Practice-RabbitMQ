@@ -26,23 +26,36 @@ namespace RabbitMQ.Producer
             {
                 using (var channel = connection.CreateModel())
                 {
-                    channel.QueueDeclare(queue: "task_queue", durable: true, exclusive: false, autoDelete: false, arguments: null);
+                    //channel.QueueDeclare(queue: "task_queue", durable: true, exclusive: false, autoDelete: false, arguments: null);
 
-                    var properties = channel.CreateBasicProperties();
-                    //properties.SetPersistent(true);
-                    properties.Persistent = true;
+                    //var properties = channel.CreateBasicProperties();
+                    ////properties.SetPersistent(true);
+                    //properties.Persistent = true;
+
+                    channel.ExchangeDeclare(exchange: "xa_test_logs", type: "fanout");
 
                     string inputMessage = null;
                     do
                     {
-                        var message = GetMessage(new string[] { inputMessage });
+                        var message = string.IsNullOrWhiteSpace(inputMessage) ? GetMessage(null) : GetMessage(new string[] { inputMessage });
                         var body = Encoding.UTF8.GetBytes(message);
 
-                        channel.BasicPublish(exchange: "",
-                            routingKey: "task_queue",
-                            basicProperties: properties,
+                        //channel.BasicPublish(exchange: "",
+                        //    routingKey: "task_queue",
+                        //    basicProperties: properties,
+                        //    body: body);
+                        channel.BasicPublish(exchange: "xa_test_logs",
+                            routingKey: "",
+                            basicProperties: null,
                             body: body);
+                        Console.WriteLine(" [x] Sent {0}", message);
                     } while (!(inputMessage = Console.ReadLine()).Equals("exit", StringComparison.OrdinalIgnoreCase));
+
+
+
+                    //var message = GetMessage(args);
+                    //var body = Encoding.UTF8.GetBytes(message);
+
 
                 }
             }
@@ -52,7 +65,7 @@ namespace RabbitMQ.Producer
 
         private static string GetMessage(string[] args)
         {
-            return ((args.Length > 0) ? string.Join(" ", args) : "Hello World!");
+            return (args != null && (args.Length > 0) ? string.Join(" ", args) : "Hello World!");
         }
     }
 
