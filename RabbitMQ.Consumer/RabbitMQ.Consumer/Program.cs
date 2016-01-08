@@ -13,6 +13,8 @@ using Rebus.NLog;
 using Rebus.RabbitMq;
 using RabbitMQ.Client.Events;
 using System.Threading;
+using FortuneLab.MessageQueue.RabbitMq;
+using Newtonsoft.Json;
 
 namespace RabbitMQ.Consumer
 {
@@ -20,37 +22,84 @@ namespace RabbitMQ.Consumer
     {
         static void Main(string[] args)
         {
-           var serverName = ConfigurationManager.AppSettings["RabbitServer"];
-            //var queueName = ConfigurationManager.AppSettings["QueueName"];
 
-            var factory = new ConnectionFactory() { HostName = ConfigurationManager.AppSettings["RabbitServer"], UserName = "dev", Password = "dev", VirtualHost = "dev_host" };
+            //var userLoginConsumer = new UserLoginEventConsumer();
+            //userLoginConsumer.StartConsume();
 
-            using (var connection = factory.CreateConnection())
-            using (var channel = connection.CreateModel())
+            MessageQueueConsumer.Consume("UserSessionValidationQueue", (ea, message) =>
             {
-                channel.ExchangeDeclare(exchange: "xa_test_logs", type: "fanout");
+                Console.WriteLine(" [x] Received {0}", message);
+                Console.WriteLine(" [x] Done");
+            });
 
-                var queueName = channel.QueueDeclare().QueueName;
-                channel.QueueBind(queue: queueName,
-                                  exchange: "xa_test_logs",
-                                  routingKey: "");
+            Console.WriteLine(" Press [enter] to exit.");
+            Console.ReadLine();
+        }
+    }
 
-                Console.WriteLine(" [*] Waiting for logs.");
+    public class MessageQueueConsumer
+    {
+        public static void Consume(string MessageQueueName, Action<BasicDeliverEventArgs, string> messageHandler)
+        {
+            var channel = ConnectionManager.Instance.CurrentModel;
+            channel.QueueDeclare(queue: MessageQueueName, durable: true, exclusive: false, autoDelete: false, arguments: null);
+            channel.BasicQos(prefetchSize: 0, prefetchCount: 1, global: false);
+            var consumer = new EventingBasicConsumer(channel);
+            consumer.Received += (sender, ea) =>
+            {
+                var body = ea.Body;
+                var message = Encoding.UTF8.GetString(body);
+                messageHandler(ea, message);
+                (sender as IBasicConsumer).Model.BasicAck(deliveryTag: ea.DeliveryTag, multiple: false);
+            };
+            channel.BasicConsume(queue: MessageQueueName, noAck: false, consumer: consumer);
+        }
 
-                var consumer = new EventingBasicConsumer(channel);
-                consumer.Received += (model, ea) =>
-                {
-                    var body = ea.Body;
-                    var message = Encoding.UTF8.GetString(body);
-                    Console.WriteLine(" [x] {0}", message);
-                };
-                channel.BasicConsume(queue: queueName,
-                                     noAck: true,
-                                     consumer: consumer);
+        public static void Consume<TEventData>(string MessageQueueName, Action<BasicDeliverEventArgs, TEventData> messageHandler)
+        {
+            var channel = ConnectionManager.Instance.CurrentModel;
+            channel.QueueDeclare(queue: MessageQueueName, durable: true, exclusive: false, autoDelete: false, arguments: null);
+            channel.BasicQos(prefetchSize: 0, prefetchCount: 1, global: false);
+            var consumer = new EventingBasicConsumer(channel);
+            consumer.Received += (sender, ea) =>
+            {
+                var body = ea.Body;
+                var message = Encoding.UTF8.GetString(body);
+                messageHandler(ea, JsonConvert.DeserializeObject<TEventData>(message));
+                (sender as IBasicConsumer).Model.BasicAck(deliveryTag: ea.DeliveryTag, multiple: false);
+            };
+            channel.BasicConsume(queue: MessageQueueName, noAck: false, consumer: consumer);
+        }
+    }
 
-                Console.WriteLine(" Press [enter] to exit.");
-                Console.ReadLine();
-            }
+
+    public class UserLoginEventConsumer : MessageConsumer
+    {
+        public UserLoginEventConsumer()
+            : base("UserSessionValidationQueue")
+        { }
+
+        public override void Consumer(BasicDeliverEventArgs e, string message)
+        {
+            Console.WriteLine(" [x] Received {0}", message);
+
+            Console.WriteLine(" [x] Done");
+        }
+    }
+
+    public class EventConsumer : MessageConsumer
+    {
+        public EventConsumer(string messageQueueName, Action<BasicDeliverEventArgs, string> messageHandler)
+            : base("UserSessionValidationQueue")
+        {
+
+        }
+
+        public override void Consumer(BasicDeliverEventArgs e, string message)
+        {
+            Console.WriteLine(" [x] Received {0}", message);
+
+            Console.WriteLine(" [x] Done");
         }
     }
 }
